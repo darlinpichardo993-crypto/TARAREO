@@ -1,6 +1,6 @@
 [Setup]
 AppName=TARAREO
-AppVersion=0.1.0
+AppVersion=0.3.0
 AppPublisher=ORYMY And YMY Records
 DefaultDirName={autopf}\TARAREO
 DefaultGroupName=TARAREO
@@ -13,9 +13,8 @@ PrivilegesRequired=admin
 DisableProgramGroupPage=yes
 
 [Files]
-; Plugin VST3 (carpeta estandar que escanea FL Studio)
+; Plugin VST3 — FL Studio escanea la carpeta estándar.
 Source: "..\build\Tarareo_artefacts\Release\VST3\TARAREO.vst3\*"; DestDir: "{commoncf64}\VST3\TARAREO.vst3"; Flags: recursesubdirs ignoreversion
-; Version independiente
 Source: "..\build\Tarareo_artefacts\Release\Standalone\TARAREO.exe"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
