@@ -41,6 +41,10 @@ bool TarareoProcessor::isBusesLayoutSupported (const BusesLayout& l) const
 void TarareoProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer&)
 {
     juce::ScopedNoDenormals noDenormals;
+
+    if (buffer.getNumChannels() > 0)
+        inputLevel = juce::jmax (buffer.getMagnitude (0, buffer.getNumSamples()), inputLevel.load() * 0.97f);
+
     if (! recording.load() || recorded.getNumSamples() == 0 || buffer.getNumChannels() == 0)
         return;                                 // el audio pasa sin tocar
 

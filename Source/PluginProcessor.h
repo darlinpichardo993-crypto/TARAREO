@@ -34,6 +34,8 @@ public:
     bool isRecording() const { return recording.load(); }
     void generate();                      // envia el tarareo al servidor (hilo aparte)
 
+    float getInputLevel() const { return inputLevel.load(); }
+
     juce::String getStatus() const  { const juce::ScopedLock l (lock); return status; }
     juce::String getLyrics() const  { const juce::ScopedLock l (lock); return lyrics; }
     juce::File   getLastFile() const{ const juce::ScopedLock l (lock); return lastFile; }
@@ -46,6 +48,7 @@ private:
     juce::AudioBuffer<float> recorded;
     std::atomic<int> writePos { 0 };
     std::atomic<bool> recording { false };
+    std::atomic<float> inputLevel { 0.0f };
     double sampleRateHz = 44100.0;
 
     mutable juce::CriticalSection lock;
