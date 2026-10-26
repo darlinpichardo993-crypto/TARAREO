@@ -1,0 +1,21 @@
+name: Build TARAREO (Windows)
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configurar y compilar
+        run: |
+          cmake -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build --config Release --parallel
+      - name: Instalador
+        run: |
+          choco install innosetup -y
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\TARAREO.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TARAREO-Setup
+          path: installer/Output/TARAREO-Setup.exe
