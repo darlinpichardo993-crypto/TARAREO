@@ -1,43 +1,91 @@
 #include "PluginEditor.h"
+#include <cmath>
 
 namespace
 {
-    const juce::StringArray& genreNames()
+    constexpr float baseW = 1100.0f, baseH = 720.0f;
+    void setupCombo (juce::ComboBox& combo, const juce::StringArray& options,
+                     juce::LookAndFeel& laf)
     {
-        static const juce::StringArray names { "BACHATA", "MERENGUE", "REGGAETON", "TRAP", "R&B", "POP" };
-        return names;
+        combo.setLookAndFeel (&laf);
+        combo.addItemList (options, 1);
+        combo.setJustificationType (juce::Justification::centredLeft);
     }
-
-    constexpr int kPanelX = 284, kPanelW = 448;
 }
 
-TarareoEditor::TarareoEditor (TarareoProcessor& p) : AudioProcessorEditor (&p), proc (p)
+TarareoEditor::TarareoEditor (TarareoProcessor& p)
+    : AudioProcessorEditor (&p), proc (p)
 {
-    genreKnob.setLookAndFeel (&laf);
+    setupCombo (genreBox, { "Bachata", "Merengue", "Reggaetón", "Trap", "R&B", "Pop",
+                            "Salsa", "Dembow", "Bolero", "Soul" }, laf);
+    setupCombo (sectionBox, { "Verso", "Pre-coro", "Coro", "Puente", "Outro" }, laf);
+    setupCombo (voiceBox, { "Masculina", "Femenina" }, laf);
+    setupCombo (rangeBox, { "Bajo", "Barítono", "Tenor", "Contralto", "Alto", "Mezzosoprano", "Soprano" }, laf);
+    setupCombo (bpmModeBox, { "Sincronizar con FL Studio", "BPM manual" }, laf);
+    setupCombo (zoomBox, { "100%", "125%", "150%" }, laf);
+
+    genreAttach = std::make_unique<ComboAttachment> (proc.apvts, "genre", genreBox);
+    sectionAttach = std::make_unique<ComboAttachment> (proc.apvts, "section", sectionBox);
+    voiceAttach = std::make_unique<ComboAttachment> (proc.apvts, "voice", voiceBox);
+    rangeAttach = std::make_unique<ComboAttachment> (proc.apvts, "range", rangeBox);
+    bpmModeAttach = std::make_unique<ComboAttachment> (proc.apvts, "bpmMode", bpmModeBox);
+
+    for (auto* box : { &genreBox, &sectionBox, &voiceBox, &rangeBox, &bpmModeBox, &zoomBox })
+        addAndMakeVisible (*box);
+    zoomBox.setSelectedId (1, juce::dontSendNotification);
+    zoomBox.onChange = [this]
+    {
+        const float zoom = zoomBox.getSelectedId() == 2 ? 1.25f
+                         : zoomBox.getSelectedId() == 3 ? 1.5f : 1.0f;
+        setSize ((int) (baseW * zoom), (int) (baseH * zoom));
+    };
+
+    for (auto* s : { &bpmSlider, &creativitySlider })
+    {
+        s->setLookAndFeel (&laf);
+        s->setSliderStyle (juce::Slider::LinearHorizontal);
+        s->setTextBoxStyle (juce::Slider::TextBoxRight, false, 62, 26);
+        s->setColour (juce::Slider::textBoxTextColourId, neon::white);
+        s->setColour (juce::Slider::textBoxBackgroundColourId, juce::Colour (0xff111725));
+        s->setColour (juce::Slider::textBoxOutlineColourId, neon::border);
+        addAndMakeVisible (*s);
+    }
+    bpmAttach = std::make_unique<SliderAttachment> (proc.apvts, "bpm", bpmSlider);
+    creativityAttach = std::make_unique<SliderAttachment> (proc.apvts, "creativity", creativitySlider);
+    bpmSlider.setTextValueSuffix (" BPM");
+    creativitySlider.setTextValueSuffix (" %");
+
+    themeBox.setMultiLine (false);
+    themeBox.setTextToShowWhenEmpty ("Ej.: Me perdi pensando en ti...", neon::muted);
+    themeBox.setText (proc.getTheme(), false);
+    themeBox.onTextChange = [this] { proc.setTheme (themeBox.getText()); };
+    themeBox.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xff0c1120));
+    themeBox.setColour (juce::TextEditor::outlineColourId, neon::border);
+    themeBox.setColour (juce::TextEditor::focusedOutlineColourId, neon::cyan);
+    themeBox.setColour (juce::TextEditor::textColourId, neon::white);
+    themeBox.setColour (juce::TextEditor::highlightColourId, neon::violet);
+    addAndMakeVisible (themeBox);
+
+    lyricsBox.setMultiLine (true);
+    lyricsBox.setReturnKeyStartsNewLine (true);
+    lyricsBox.setReadOnly (true);
+    lyricsBox.setScrollbarsShown (true);
+    lyricsBox.setTextToShowWhenEmpty ("Tu composicion aparecera aqui, con frases completas...", neon::muted);
+    lyricsBox.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xff0b1020));
+    lyricsBox.setColour (juce::TextEditor::outlineColourId, neon::border);
+    lyricsBox.setColour (juce::TextEditor::focusedOutlineColourId, neon::violet);
+    lyricsBox.setColour (juce::TextEditor::textColourId, neon::white);
+    lyricsBox.setColour (juce::TextEditor::highlightColourId, neon::violet.withAlpha (0.65f));
+    addAndMakeVisible (lyricsBox);
+
     recBtn.setLookAndFeel (&laf);
     genBtn.setLookAndFeel (&laf);
-
-    addAndMakeVisible (singer);
-    addAndMakeVisible (vu);
-
-    genreKnob.setSliderStyle (juce::Slider::RotaryHorizontalVerticalDrag);
-    genreKnob.setTextBoxStyle (juce::Slider::NoTextBox, false, 0, 0);
-    genreKnob.setRotaryParameters (-2.4f, 2.4f, true);
-    genreKnob.setMouseDragSensitivity (150);
-    addAndMakeVisible (genreKnob);
-    genreAttach = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (proc.apvts, "genre", genreKnob);
-
-    genreLcd.setJustificationType (juce::Justification::centred);
-    genreLcd.setFont (analog::mono (20.0f));
-    genreLcd.setColour (juce::Label::textColourId, analog::amber);
-    genreLcd.setColour (juce::Label::backgroundColourId, juce::Colour (0xff120c04));
-    genreLcd.setColour (juce::Label::outlineColourId, juce::Colour (0xff6b5a3a));
-    addAndMakeVisible (genreLcd);
-
+    genBtn.setComponentID ("generate");
     recBtn.setClickingTogglesState (true);
     recBtn.onClick = [this]
     {
-        if (recBtn.getToggleState()) proc.startRecording(); else proc.stopRecording();
+        if (recBtn.getToggleState()) proc.startRecording();
+        else proc.stopRecording();
     };
     genBtn.onClick = [this]
     {
@@ -47,164 +95,145 @@ TarareoEditor::TarareoEditor (TarareoProcessor& p) : AudioProcessorEditor (&p), 
     addAndMakeVisible (recBtn);
     addAndMakeVisible (genBtn);
 
-    status.setJustificationType (juce::Justification::centred);
-    status.setFont (analog::serif (14.0f, juce::Font::italic));
-    status.setColour (juce::Label::textColourId, analog::cream);
+    status.setJustificationType (juce::Justification::centredLeft);
+    status.setColour (juce::Label::textColourId, neon::muted);
+    status.setMinimumHorizontalScale (0.7f);
     addAndMakeVisible (status);
-
-    lyricsBox.setMultiLine (true);
-    lyricsBox.setReadOnly (true);
-    lyricsBox.setFont (analog::mono (16.0f, juce::Font::plain));
-    lyricsBox.setColour (juce::TextEditor::backgroundColourId, juce::Colour (0xffefe3bf));
-    lyricsBox.setColour (juce::TextEditor::textColourId, analog::ink);
-    lyricsBox.setColour (juce::TextEditor::outlineColourId, juce::Colour (0xff6b5a3a));
-    lyricsBox.setColour (juce::TextEditor::focusedOutlineColourId, juce::Colour (0xff6b5a3a));
-    addAndMakeVisible (lyricsBox);
-
+    addAndMakeVisible (singer);
     addAndMakeVisible (dragZone);
+    singer.setFemale (proc.apvts.getRawParameterValue ("voice")->load() >= 0.5f);
 
-    setSize (760, 560);
-    startTimerHz (30);
+    setResizable (true, true);
+    setResizeLimits (880, 576, 1650, 1080);
+    setSize ((int) baseW, (int) baseH);
+    startTimerHz (24);
 }
 
 TarareoEditor::~TarareoEditor()
 {
-    genreKnob.setLookAndFeel (nullptr);
+    stopTimer();
+    for (auto* box : { &genreBox, &sectionBox, &voiceBox, &rangeBox, &bpmModeBox, &zoomBox })
+        box->setLookAndFeel (nullptr);
+    for (auto* slider : { &bpmSlider, &creativitySlider })
+        slider->setLookAndFeel (nullptr);
     recBtn.setLookAndFeel (nullptr);
     genBtn.setLookAndFeel (nullptr);
 }
 
-void TarareoEditor::timerCallback()
+juce::Rectangle<int> TarareoEditor::scaleBounds (float x, float y, float w, float h) const
 {
-    const float lvl = proc.getInputLevel();
-    vu.setLevel (lvl);
-    singer.setLevel (lvl);
-
-    status.setText (proc.getStatus(), juce::dontSendNotification);
-
-    const auto l = proc.getLyrics();
-    if (l != lyricsBox.getText()) lyricsBox.setText (l, false);
-
-    const bool rec = proc.isRecording();
-    if (recBtn.getToggleState() != rec) recBtn.setToggleState (rec, juce::dontSendNotification);
-    recBtn.setButtonText (rec ? "DETENER" : "GRABAR");
-
-    const int idx = juce::jlimit (0, genreNames().size() - 1,
-                                  (int) std::round (proc.apvts.getRawParameterValue ("genre")->load()));
-    if (idx != genreIndex)
-    {
-        genreIndex = idx;
-        genreLcd.setText (genreNames()[idx], juce::dontSendNotification);
-        repaint (knobArea);
-    }
-
-    const auto path = proc.getLastFile().getFullPathName();
-    if (path != lastPath) { lastPath = path; dragZone.repaint(); }
+    return { (int) std::round (x * getWidth() / baseW),
+             (int) std::round (y * getHeight() / baseH),
+             (int) std::round (w * getWidth() / baseW),
+             (int) std::round (h * getHeight() / baseH) };
 }
 
-void TarareoEditor::paintBackdrop (juce::Graphics& g, int w, int h)
+void TarareoEditor::paintLabel (juce::Graphics& g, const juce::String& text,
+                                float x, float y, float w, juce::Colour colour)
 {
-    const auto W = (float) w, H = (float) h;
-
-    // madera
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff5a3720), 0.0f, 0.0f, juce::Colour (0xff2c180c), 0.0f, H, false));
-    g.fillAll();
-    juce::Random rnd (42);
-    for (float y = 0.0f; y < H; y += 2.0f)
-    {
-        g.setColour ((rnd.nextBool() ? juce::Colours::black : juce::Colour (0xffb98a5a)).withAlpha (0.03f + rnd.nextFloat() * 0.07f));
-        g.drawLine (0.0f, y, W, y + rnd.nextFloat() * 3.0f - 1.5f, 1.0f);
-    }
-
-    // placa metalica
-    auto plate = juce::Rectangle<float> (12.0f, 12.0f, W - 24.0f, H - 24.0f);
-    g.setColour (juce::Colours::black.withAlpha (0.55f));
-    g.fillRoundedRectangle (plate.translated (0.0f, 4.0f), 14.0f);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff30333b), 0.0f, plate.getY(), juce::Colour (0xff15161a), 0.0f, plate.getBottom(), false));
-    g.fillRoundedRectangle (plate, 14.0f);
-    for (float y = plate.getY() + 2.0f; y < plate.getBottom() - 2.0f; y += 2.0f)
-    {
-        g.setColour ((rnd.nextBool() ? juce::Colours::white : juce::Colours::black).withAlpha (0.02f + rnd.nextFloat() * 0.025f));
-        g.drawHorizontalLine ((int) y, plate.getX() + 6.0f, plate.getRight() - 6.0f);
-    }
-    g.setColour (analog::gold.withAlpha (0.45f));
-    g.drawRoundedRectangle (plate.reduced (5.0f), 10.0f, 1.3f);
-
-    // tornillos
-    const juce::Point<float> screws[] = { { 24, 24 }, { W - 24, 24 }, { 24, H - 24 }, { W - 24, H - 24 } };
-    for (auto s : screws)
-    {
-        g.setGradientFill (juce::ColourGradient (juce::Colour (0xffd0d0d0), s.x - 2.0f, s.y - 2.0f, juce::Colour (0xff4a4a4a), s.x + 4.0f, s.y + 4.0f, true));
-        g.fillEllipse (s.x - 4.5f, s.y - 4.5f, 9.0f, 9.0f);
-        g.setColour (juce::Colours::black.withAlpha (0.7f));
-        g.drawLine (s.x - 3.0f, s.y + 1.5f, s.x + 3.0f, s.y - 1.5f, 1.3f);
-    }
-
-    // titulo grabado
-    const auto titleBox = juce::Rectangle<int> (kPanelX, 30, kPanelW, 58);
-    g.setFont (analog::serif (50.0f, juce::Font::bold | juce::Font::italic));
-    g.setColour (juce::Colours::black.withAlpha (0.7f));
-    g.drawText ("TARAREO", titleBox.translated (2, 3), juce::Justification::centred);
-    g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff7e1a0), 0.0f, 34.0f, juce::Colour (0xffb98a2e), 0.0f, 84.0f, false));
-    g.drawText ("TARAREO", titleBox, juce::Justification::centred);
-
-    g.setFont (analog::script (15.0f));
-    g.setColour (analog::cream.withAlpha (0.85f));
-    g.drawText ("Tararea. La IA escribe y canta.", juce::Rectangle<int> (kPanelX, 86, kPanelW, 26), juce::Justification::centred);
-
-    g.setColour (analog::gold.withAlpha (0.45f));
-    g.drawHorizontalLine (114, (float) kPanelX, (float) (kPanelX + kPanelW));
-
-    // pie
-    g.setFont (analog::serif (14.0f, juce::Font::italic));
-    g.setColour (juce::Colours::black.withAlpha (0.6f));
-    g.drawText ("Made By ORYMY And YMY Records", juce::Rectangle<int> (1, h - 39, w, 22), juce::Justification::centred);
-    g.setColour (analog::gold);
-    g.drawText ("Made By ORYMY And YMY Records", juce::Rectangle<int> (0, h - 40, w, 22), juce::Justification::centred);
+    const float scale = juce::jmin (getWidth() / baseW, getHeight() / baseH);
+    g.setFont (neon::font (12.0f * scale, juce::Font::bold));
+    g.setColour (colour);
+    g.drawText (text, scaleBounds (x, y, w, 22), juce::Justification::centredLeft);
 }
 
 void TarareoEditor::paint (juce::Graphics& g)
 {
-    if (backdrop.isNull() || backdrop.getWidth() != getWidth() || backdrop.getHeight() != getHeight())
-    {
-        backdrop = juce::Image (juce::Image::ARGB, getWidth(), getHeight(), true);
-        juce::Graphics bg (backdrop);
-        paintBackdrop (bg, getWidth(), getHeight());
-    }
-    g.drawImageAt (backdrop, 0, 0);
+    g.setGradientFill (juce::ColourGradient (juce::Colour (0xff11172b), 0, 0,
+                                             neon::bg, (float) getWidth(), (float) getHeight(), false));
+    g.fillAll();
+    g.setColour (neon::cyan.withAlpha (0.13f));
+    for (int x = 0; x < getWidth(); x += 40) g.drawVerticalLine (x, 0.0f, (float) getHeight());
 
-    // etiquetas alrededor de la perilla de genero
-    const auto c = knobArea.getCentre().toFloat();
-    for (int i = 0; i < genreNames().size(); ++i)
-    {
-        const float a = -2.4f + (float) i / 5.0f * 4.8f;
-        const float lx = c.x + std::sin (a) * 62.0f, ly = c.y - std::cos (a) * 62.0f;
-        const bool sel = (i == genreIndex);
-        g.setFont (analog::serif (sel ? 11.0f : 10.0f));
-        g.setColour (sel ? analog::amber : analog::cream.withAlpha (0.55f));
-        g.drawText (genreNames()[i], juce::Rectangle<float> (lx - 40.0f, ly - 7.0f, 80.0f, 14.0f), juce::Justification::centred);
+    const float s = juce::jmin (getWidth() / baseW, getHeight() / baseH);
+    g.setColour (neon::white);
+    g.setFont (neon::font (42.0f * s, juce::Font::bold));
+    g.drawText ("TARAREO", scaleBounds (30, 20, 302, 62), juce::Justification::centredLeft);
+    g.setColour (neon::pink);
+    g.fillRoundedRectangle (scaleBounds (295, 70, 92, 4).toFloat(), 2.0f);
+    paintLabel (g, "AI SONGWRITER / V3 PROFESSIONAL", 366, 30, 390, neon::cyan);
+    paintLabel (g, "ESCALA", 905, 29, 105);
 
-        g.setColour (sel ? analog::amber : analog::cream.withAlpha (0.35f));
-        g.fillEllipse (c.x + std::sin (a) * 45.0f - 1.5f, c.y - std::cos (a) * 45.0f - 1.5f, 3.0f, 3.0f);
-    }
+    neon::panelBackground (g, scaleBounds (294, 105, 458, 560).toFloat(), neon::violet);
+    neon::panelBackground (g, scaleBounds (773, 105, 302, 560).toFloat(), neon::pink);
+    paintLabel (g, "IDEA / TEMA DE LA CANCION", 312, 127, 370);
+    paintLabel (g, "LETRA GENERADA CON IA", 312, 345, 380, neon::cyan);
+
+    paintLabel (g, "AJUSTES CREATIVOS", 792, 125, 245, neon::pink);
+    paintLabel (g, "GENERO MUSICAL", 792, 166, 240);
+    paintLabel (g, "PARTE DE LA CANCION", 792, 230, 240);
+    paintLabel (g, "MODELO DE VOZ", 792, 294, 240);
+    paintLabel (g, "RANGO VOCAL", 792, 358, 240);
+    paintLabel (g, "SINCRONIZACION DEL TEMPO", 792, 422, 260);
+    paintLabel (g, "BPM", 792, 494, 180);
+    paintLabel (g, "CREATIVIDAD", 792, 558, 200);
+
+    g.setColour (neon::violet.withAlpha (0.34f));
+    g.drawHorizontalLine (scaleBounds (0, 677, 0, 0).getY(),
+                          (float) scaleBounds (29, 0, 0, 0).getX(),
+                          (float) scaleBounds (1072, 0, 0, 0).getX());
+    g.setFont (neon::font (13.0f * s, juce::Font::bold));
+    g.setColour (neon::white.withAlpha (0.83f));
+    g.drawText ("Made By ORYMY And YMY Records", scaleBounds (25, 681, 600, 29),
+                juce::Justification::centredLeft);
+    g.setColour (neon::muted);
+    g.drawText ("VST3  /  WINDOWS  /  FL STUDIO", scaleBounds (728, 681, 349, 29),
+                juce::Justification::centredRight);
 }
 
 void TarareoEditor::resized()
 {
-    singer.setBounds (28, 28, 240, 490);
+    singer.setBounds (scaleBounds (25, 105, 246, 560));
+    zoomBox.setBounds (scaleBounds (969, 41, 104, 32));
+    themeBox.setBounds (scaleBounds (312, 158, 420, 47));
+    recBtn.setBounds (scaleBounds (312, 224, 198, 48));
+    genBtn.setBounds (scaleBounds (527, 224, 205, 48));
+    status.setBounds (scaleBounds (312, 285, 422, 44));
+    lyricsBox.setBounds (scaleBounds (312, 377, 420, 205));
+    dragZone.setBounds (scaleBounds (312, 603, 420, 44));
 
-    knobArea = { kPanelX, 118, 170, 140 };
-    genreKnob.setBounds (knobArea.withSizeKeepingCentre (76, 76));
-    vu.setBounds (kPanelX + 190, 118, kPanelW - 190, 140);
+    genreBox.setBounds (scaleBounds (791, 188, 264, 36));
+    sectionBox.setBounds (scaleBounds (791, 252, 264, 36));
+    voiceBox.setBounds (scaleBounds (791, 316, 264, 36));
+    rangeBox.setBounds (scaleBounds (791, 380, 264, 36));
+    bpmModeBox.setBounds (scaleBounds (791, 444, 264, 36));
+    bpmSlider.setBounds (scaleBounds (791, 519, 264, 35));
+    creativitySlider.setBounds (scaleBounds (791, 584, 264, 35));
 
-    genreLcd.setBounds (kPanelX, 266, kPanelW, 30);
+    const float scale = juce::jmin (getWidth() / baseW, getHeight() / baseH);
+    lyricsBox.setFont (neon::font (21.0f * scale));
+    themeBox.setFont (neon::font (15.0f * scale));
+    status.setFont (neon::font (13.0f * scale));
+}
 
-    recBtn.setBounds (kPanelX, 306, 218, 46);
-    genBtn.setBounds (kPanelX + 230, 306, 218, 46);
+void TarareoEditor::timerCallback()
+{
+    singer.setLevel (proc.getInputLevel());
+    const int voice = (int) std::round (proc.apvts.getRawParameterValue ("voice")->load());
+    if (voice != voiceIndex)
+    {
+        voiceIndex = voice;
+        singer.setFemale (voice == 1);
+    }
 
-    status.setBounds (kPanelX, 358, kPanelW, 22);
-    lyricsBox.setBounds (kPanelX, 386, kPanelW, 66);
-    dragZone.setBounds (kPanelX, 460, kPanelW, 44);
+    const auto message = proc.getStatus();
+    if (message != status.getText()) status.setText (message, juce::dontSendNotification);
+    const auto lyric = proc.getLyrics();
+    if (lyric != lyricsBox.getText()) lyricsBox.setText (lyric, false);
 
-    backdrop = {};
+    const bool recording = proc.isRecording();
+    if (recBtn.getToggleState() != recording)
+        recBtn.setToggleState (recording, juce::dontSendNotification);
+    recBtn.setButtonText (recording ? "■ DETENER" : "● GRABAR");
+    genBtn.setEnabled (! proc.isGenerating());
+    bpmSlider.setEnabled (proc.apvts.getRawParameterValue ("bpmMode")->load() >= 0.5f);
+
+    const auto path = proc.getLastFile().getFullPathName();
+    const auto mode = proc.getAudioMode();
+    if (path != lastPath || mode != lastAudioMode)
+    {
+        lastPath = path;
+        lastAudioMode = mode;
+        dragZone.repaint();
+    }
 }

@@ -1,6 +1,6 @@
 #pragma once
 #include "PluginProcessor.h"
-#include "AnalogUI.h"
+#include "NeonUI.h"
 
 class TarareoEditor : public juce::AudioProcessorEditor, private juce::Timer
 {
@@ -14,28 +14,26 @@ private:
     struct DragZone : public juce::Component
     {
         TarareoProcessor& proc;
-        explicit DragZone (TarareoProcessor& p) : proc (p) { setMouseCursor (juce::MouseCursor::DraggingHandCursor); }
+        explicit DragZone (TarareoProcessor& p) : proc (p)
+        {
+            setMouseCursor (juce::MouseCursor::DraggingHandCursor);
+        }
 
         void paint (juce::Graphics& g) override
         {
-            auto b = getLocalBounds().toFloat().reduced (2.0f);
-            g.setColour (juce::Colours::black.withAlpha (0.45f));
-            g.fillRoundedRectangle (b.translated (0.0f, 2.0f), 6.0f);
-            g.setGradientFill (juce::ColourGradient (juce::Colour (0xfff3e6c4), b.getX(), b.getY(),
-                                                     juce::Colour (0xffd9c48c), b.getX(), b.getBottom(), false));
-            g.fillRoundedRectangle (b, 6.0f);
-
-            juce::Path outline, dashed;
-            outline.addRoundedRectangle (b.reduced (4.0f), 4.0f);
-            const float dashes[] = { 6.0f, 4.0f };
-            juce::PathStrokeType (1.2f).createDashedStroke (dashed, outline, dashes, 2);
-            g.setColour (analog::ink.withAlpha (0.55f));
-            g.fillPath (dashed);
-
-            g.setColour (analog::ink);
-            g.setFont (analog::serif (14.0f));
-            g.drawText (proc.getLastFile().existsAsFile() ? "ARRASTRA ESTE AUDIO A FL STUDIO"
-                                                          : "AQUI APARECERA TU VOZ CANTANDO",
+            auto r = getLocalBounds().toFloat().reduced (1.0f);
+            g.setColour (juce::Colour (0xff091522));
+            g.fillRoundedRectangle (r, 11.0f);
+            g.setColour (neon::cyan.withAlpha (0.65f));
+            g.drawRoundedRectangle (r.reduced (0.5f), 11.0f, 1.6f);
+            g.setFont (neon::font (13.0f, juce::Font::bold));
+            g.setColour (neon::white);
+            const auto f = proc.getLastFile();
+            const auto mode = proc.getAudioMode();
+            g.drawText (f.existsAsFile()
+                           ? (mode == "singing" ? "↗ ARRASTRAR VOZ IA A FL STUDIO"
+                                                : "↗ ARRASTRAR TARAREO GUÍA (NO ES VOZ IA)")
+                           : "AQUÍ APARECERÁ LA PISTA PARA FL STUDIO",
                         getLocalBounds(), juce::Justification::centred);
         }
 
@@ -43,29 +41,35 @@ private:
         {
             auto f = proc.getLastFile();
             if (f.existsAsFile())
-                juce::DragAndDropContainer::performExternalDragDropOfFiles ({ f.getFullPathName() }, false);
+                juce::DragAndDropContainer::performExternalDragDropOfFiles (
+                    { f.getFullPathName() }, false);
         }
     };
 
     void timerCallback() override;
-    void paintBackdrop (juce::Graphics&, int w, int h);
+    juce::Rectangle<int> scaleBounds (float x, float y, float w, float h) const;
+    void paintLabel (juce::Graphics&, const juce::String&, float x, float y,
+                     float w, juce::Colour = neon::muted);
 
     TarareoProcessor& proc;
+    neon::NeonLookAndFeel laf; // Declarar antes de los componentes asociados
+    neon::SingerView singer;
 
-    analog::AnalogLookAndFeel laf;      // debe declararse antes que los componentes que lo usan
-    analog::SingerView singer;
-    analog::VuMeter vu;
-    juce::Slider genreKnob;
-    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> genreAttach;
-    juce::Label genreLcd, status;
-    juce::TextButton recBtn { "GRABAR" }, genBtn { "GENERAR" };
-    juce::TextEditor lyricsBox;
+    juce::ComboBox genreBox, sectionBox, voiceBox, rangeBox, bpmModeBox, zoomBox;
+    juce::Slider bpmSlider, creativitySlider;
+    juce::TextEditor themeBox, lyricsBox;
+    juce::Label status;
+    juce::TextButton recBtn { "● GRABAR" }, genBtn { "✦ COMPONER" };
     DragZone dragZone { proc };
 
-    juce::Image backdrop;
-    juce::Rectangle<int> knobArea;
-    int genreIndex = -1;
-    juce::String lastPath;
+    using ComboAttachment = juce::AudioProcessorValueTreeState::ComboBoxAttachment;
+    using SliderAttachment = juce::AudioProcessorValueTreeState::SliderAttachment;
+    std::unique_ptr<ComboAttachment> genreAttach, sectionAttach, voiceAttach,
+                                     rangeAttach, bpmModeAttach;
+    std::unique_ptr<SliderAttachment> bpmAttach, creativityAttach;
+
+    juce::String lastPath, lastAudioMode;
+    int voiceIndex = -1;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TarareoEditor)
 };
